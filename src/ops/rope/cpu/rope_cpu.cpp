@@ -8,10 +8,11 @@
 template <typename T>
 void rope_(T *out, const T *in, const int64_t *pos_ids, float theta, size_t seq_len, size_t n_heads, size_t head_dim) {
     const size_t half_dim = head_dim / 2;
-    // Precompute frequencies for each dimension j
-    std::vector<float> freqs(half_dim);
+    // Precompute inverse frequencies (denominators) for each dimension j
+    // To match PyTorch's behavior: phi = pos / (theta ^ (2j/d))
+    std::vector<float> inv_freqs(half_dim);
     for (size_t j = 0; j < half_dim; ++j) {
-        freqs[j] = 1.0f / std::pow(theta, 2.0f * static_cast<float>(j) / static_cast<float>(head_dim));
+        inv_freqs[j] = static_cast<float>(std::pow(static_cast<double>(theta), 2.0 * static_cast<double>(j) / static_cast<double>(head_dim)));
     }
 
     for (size_t i = 0; i < seq_len; ++i) {
@@ -21,7 +22,7 @@ void rope_(T *out, const T *in, const int64_t *pos_ids, float theta, size_t seq_
             const T* in_ptr = in + base_idx;
             T* out_ptr = out + base_idx;
             for (size_t j = 0; j < half_dim; ++j) {
-                float phi = pos * freqs[j];
+                float phi = pos / inv_freqs[j];
                 float cos_phi = std::cos(phi);
                 float sin_phi = std::sin(phi);
                 // a = in[j], b = in[j + half_dim]
