@@ -9,26 +9,26 @@ template <typename T>
 void rope_(T *out, const T *in, const int64_t *pos_ids, float theta, size_t seq_len, size_t n_heads, size_t head_dim) {
     const size_t half_dim = head_dim / 2;
     // Precompute frequencies for each dimension j
-    std::vector<double> freqs(half_dim);
+    std::vector<float> freqs(half_dim);
     for (size_t j = 0; j < half_dim; ++j) {
-        freqs[j] = 1.0f / std::pow(theta, 2.0f * static_cast<double>(j) / static_cast<double>(head_dim));
+        freqs[j] = 1.0f / std::pow(theta, 2.0f * static_cast<float>(j) / static_cast<float>(head_dim));
     }
 
     for (size_t i = 0; i < seq_len; ++i) {
-        const double pos = static_cast<double>(pos_ids[i]);
+        const float pos = static_cast<float>(pos_ids[i]);
         for (size_t h = 0; h < n_heads; ++h) {
             const size_t base_idx = (i * n_heads + h) * head_dim;
             const T* in_ptr = in + base_idx;
             T* out_ptr = out + base_idx;
             for (size_t j = 0; j < half_dim; ++j) {
-                double phi = pos * freqs[j];
-                double cos_phi = std::cos(phi);
-                double sin_phi = std::sin(phi);
+                float phi = pos * freqs[j];
+                float cos_phi = std::cos(phi);
+                float sin_phi = std::sin(phi);
                 // a = in[j], b = in[j + half_dim]
-                double a = llaisys::utils::cast<double>(in_ptr[j]);
-                double b = llaisys::utils::cast<double>(in_ptr[j + half_dim]);
-                double a_prime = a * cos_phi - b * sin_phi;
-                double b_prime = b * cos_phi + a * sin_phi;
+                float a = llaisys::utils::cast<float>(in_ptr[j]);
+                float b = llaisys::utils::cast<float>(in_ptr[j + half_dim]);
+                float a_prime = a * cos_phi - b * sin_phi;
+                float b_prime = b * cos_phi + a * sin_phi;
                 out_ptr[j] = llaisys::utils::cast<T>(a_prime);
                 out_ptr[j + half_dim] = llaisys::utils::cast<T>(b_prime);
             }
