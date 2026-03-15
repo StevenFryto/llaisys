@@ -36,45 +36,52 @@ private:
     Qwen2Config config_;
     llaisysDeviceType_t device_type_;
     int device_id_;
+    size_t tp_rank_;
+    size_t tp_world_size_;
+    size_t hidden_shard_size_;
+    size_t kv_hidden_size_;
+    size_t kv_shard_size_;
+    size_t intermediate_shard_size_;
+    size_t vocab_shard_size_;
+    size_t vocab_start_;
+    size_t vocab_end_;
     
     // Weights
-    tensor_t embed_tokens_;     // [vocab_size, hidden_size]
-    tensor_t lm_head_;          // [vocab_size, hidden_size]
+    tensor_t embed_tokens_;     // [vocab_shard_size, hidden_size]
+    tensor_t lm_head_;          // [vocab_shard_size, hidden_size]
     tensor_t norm_weight_;      // [hidden_size]
     
     // Per-layer weights
     std::vector<tensor_t> input_layernorm_weight_;   // [hidden_size]
-    std::vector<tensor_t> q_proj_weight_;            // [hidden_size, hidden_size]
-    std::vector<tensor_t> q_proj_bias_;              // [hidden_size]
-    std::vector<tensor_t> k_proj_weight_;            // [num_kv_heads * head_dim, hidden_size]
-    std::vector<tensor_t> k_proj_bias_;              // [num_kv_heads * head_dim]
-    std::vector<tensor_t> v_proj_weight_;            // [num_kv_heads * head_dim, hidden_size]
-    std::vector<tensor_t> v_proj_bias_;              // [num_kv_heads * head_dim]
-    std::vector<tensor_t> o_proj_weight_;            // [hidden_size, hidden_size]
+    std::vector<tensor_t> q_proj_weight_;            // [hidden_shard_size, hidden_size]
+    std::vector<tensor_t> q_proj_bias_;              // [hidden_shard_size]
+    std::vector<tensor_t> k_proj_weight_;            // [kv_shard_size, hidden_size]
+    std::vector<tensor_t> k_proj_bias_;              // [kv_shard_size]
+    std::vector<tensor_t> v_proj_weight_;            // [kv_shard_size, hidden_size]
+    std::vector<tensor_t> v_proj_bias_;              // [kv_shard_size]
+    std::vector<tensor_t> o_proj_weight_;            // [hidden_size, hidden_shard_size]
     std::vector<tensor_t> post_attn_layernorm_weight_; // [hidden_size]
-    std::vector<tensor_t> gate_proj_weight_;         // [intermediate_size, hidden_size]
-    std::vector<tensor_t> up_proj_weight_;           // [intermediate_size, hidden_size]
-    std::vector<tensor_t> down_proj_weight_;         // [hidden_size, intermediate_size]
+    std::vector<tensor_t> gate_proj_weight_;         // [intermediate_shard_size, hidden_size]
+    std::vector<tensor_t> up_proj_weight_;           // [intermediate_shard_size, hidden_size]
+    std::vector<tensor_t> down_proj_weight_;         // [hidden_size, intermediate_shard_size]
     
-    // KV Cache: [num_layers][max_seq_len, num_kv_heads, head_dim]
+    // KV Cache: local shard per rank [num_layers][max_seq_len, kv_shard_size]
     std::vector<tensor_t> k_cache_;
     std::vector<tensor_t> v_cache_;
     size_t cache_len_;  // Current cached sequence length
     
     // Intermediate buffers
     tensor_t hidden_states_;    // [seq_len, hidden_size]
-    tensor_t residual_;         // [seq_len, hidden_size]
     tensor_t normed_;           // [seq_len, hidden_size]
-    tensor_t q_;                // [seq_len, num_heads, head_dim]
-    tensor_t k_;                // [seq_len, num_kv_heads, head_dim]
-    tensor_t v_;                // [seq_len, num_kv_heads, head_dim]
-    tensor_t attn_out_;         // [seq_len, num_heads, head_dim]
+    tensor_t q_local_;          // [seq_len, hidden_shard_size]
+    tensor_t k_local_;          // [seq_len, kv_shard_size]
+    tensor_t v_local_;          // [seq_len, kv_shard_size]
     tensor_t attn_proj_;        // [seq_len, hidden_size]
-    tensor_t gate_;             // [seq_len, intermediate_size]
-    tensor_t up_;               // [seq_len, intermediate_size]
-    tensor_t mlp_out_;          // [seq_len, intermediate_size]
+    tensor_t gate_;             // [seq_len, intermediate_shard_size]
+    tensor_t up_;               // [seq_len, intermediate_shard_size]
+    tensor_t mlp_out_;          // [seq_len, intermediate_shard_size]
     tensor_t down_;             // [seq_len, hidden_size]
-    tensor_t logits_;           // [1, vocab_size]
+    tensor_t logits_local_;     // [1, vocab_shard_size]
     tensor_t pos_ids_;          // [seq_len]
     tensor_t input_ids_;        // [seq_len]
     tensor_t max_idx_;          // [1]

@@ -5,6 +5,7 @@
 #include <cuda_bf16.h>
 #include <cuda_fp16.h>
 #include <cuda_runtime.h>
+#include <nccl.h>
 
 #include <iostream>
 #include <stdexcept>
@@ -19,6 +20,16 @@ namespace llaisys::device::nvidia {
                       << static_cast<int>(err__) << ")" << EXCEPTION_LOCATION_MSG << std::endl; \
             throw std::runtime_error(cudaGetErrorString(err__));                              \
         }                                                                                     \
+    } while (0)
+
+#define NCCL_CHECK(EXPR__)                                                                        \
+    do {                                                                                           \
+        ncclResult_t err__ = (EXPR__);                                                             \
+        if (err__ != ncclSuccess) {                                                                \
+            std::cerr << "[ERROR] NCCL call failed: " << ncclGetErrorString(err__) << " ("        \
+                      << static_cast<int>(err__) << ")" << EXCEPTION_LOCATION_MSG << std::endl;    \
+            throw std::runtime_error(ncclGetErrorString(err__));                                   \
+        }                                                                                          \
     } while (0)
 
 inline cudaMemcpyKind toCudaMemcpyKind(llaisysMemcpyKind_t kind) {

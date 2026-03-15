@@ -11,7 +11,7 @@ local function config_nvidia_target()
         add_cuflags("-Xcompiler=-fPIC", {force = true})
         add_culdflags("-Xcompiler -fPIC", {force = true})
     end
-    add_links("cudart", "cublas")
+    add_links("cudart", "cublas", "nccl")
 end
 
 target("llaisys-device-nvidia")

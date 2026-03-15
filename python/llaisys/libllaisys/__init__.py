@@ -2,6 +2,7 @@ import os
 import sys
 import ctypes
 from pathlib import Path
+import torch
 
 from .runtime import load_runtime
 from .runtime import LlaisysRuntimeAPI

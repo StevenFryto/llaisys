@@ -12,7 +12,14 @@ import re
 
 class Qwen2:
 
-    def __init__(self, model_path, device: DeviceType = DeviceType.CPU):
+    def __init__(
+        self,
+        model_path,
+        device: DeviceType = DeviceType.CPU,
+        device_id: int = 0,
+        rank: int = 0,
+        world_size: int = 1,
+    ):
         model_path = Path(model_path)
         
         # Load config
@@ -43,6 +50,9 @@ class Qwen2:
             self.dtype = DataType.F32
         
         self.device = device
+        self.device_id = device_id
+        self.rank = rank
+        self.world_size = world_size
         
         # Create model meta
         meta = LlaisysQwen2Meta()
@@ -60,7 +70,7 @@ class Qwen2:
         meta.end_token = self.eos_token_id
         
         # Create model
-        device_ids = (ctypes.c_int * 1)(0)
+        device_ids = (ctypes.c_int * 1)(device_id)
         self._model = LIB_LLAISYS.llaisysQwen2ModelCreate(
             ctypes.byref(meta),
             device,
@@ -92,7 +102,7 @@ class Qwen2:
         import torch
         
         # Convert to contiguous and get raw data pointer
-        tensor = tensor.contiguous()
+        tensor = self._slice_weight(name, tensor).contiguous()
         data_ptr = tensor.data_ptr()
         
         # Map weight name to model weight
@@ -133,6 +143,61 @@ class Qwen2:
                     LIB_LLAISYS.tensorLoad(self._weights.mlp_up_w[layer_idx], ctypes.c_void_p(data_ptr))
                 elif weight_name == "mlp.down_proj.weight":
                     LIB_LLAISYS.tensorLoad(self._weights.mlp_down_w[layer_idx], ctypes.c_void_p(data_ptr))
+
+    def _slice_weight(self, name: str, tensor):
+        if self.world_size == 1:
+            return tensor
+
+        def shard_dim(t, dim):
+            assert t.shape[dim] % self.world_size == 0
+            shard = t.shape[dim] // self.world_size
+            start = self.rank * shard
+            end = start + shard
+            if dim == 0:
+                return t[start:end]
+            if dim == 1:
+                return t[:, start:end]
+            raise ValueError(f"Unsupported shard dim: {dim}")
+
+        if name in {"model.embed_tokens.weight", "lm_head.weight"}:
+            return shard_dim(tensor, 0)
+        if name in {"model.norm.weight"}:
+            return tensor
+
+        match = re.match(r"model\.layers\.(\d+)\.(.*)", name)
+        if not match:
+            return tensor
+
+        weight_name = match.group(2)
+        if weight_name in {
+            "input_layernorm.weight",
+            "post_attention_layernorm.weight",
+        }:
+            return tensor
+        if weight_name in {
+            "self_attn.q_proj.weight",
+            "self_attn.k_proj.weight",
+            "self_attn.v_proj.weight",
+            "mlp.gate_proj.weight",
+            "mlp.up_proj.weight",
+        }:
+            return shard_dim(tensor, 0)
+        if weight_name in {
+            "self_attn.q_proj.bias",
+            "self_attn.k_proj.bias",
+            "self_attn.v_proj.bias",
+        }:
+            assert tensor.shape[0] % self.world_size == 0
+            shard = tensor.shape[0] // self.world_size
+            start = self.rank * shard
+            end = start + shard
+            return tensor[start:end]
+        if weight_name in {
+            "self_attn.o_proj.weight",
+            "mlp.down_proj.weight",
+        }:
+            return shard_dim(tensor, 1)
+        return tensor
 
     def generate(
         self,
