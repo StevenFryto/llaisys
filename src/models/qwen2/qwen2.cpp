@@ -3,7 +3,7 @@
 namespace llaisys::models {
 
 Qwen2Model::Qwen2Model(const Qwen2Config& config, llaisysDeviceType_t device_type, int device_id)
-    : config_(config), device_type_(device_type), device_id_(device_id), cache_len_(0) {
+    : config_(config), device_type_(device_type), device_id_(device_id), cache_len_(0), buffer_seq_len_(0) {
     
     const size_t nl = config_.num_layers;
     const size_t hs = config_.hidden_size;
@@ -67,6 +67,10 @@ void Qwen2Model::allocateKVCache() {
 }
 
 void Qwen2Model::allocateBuffers(size_t seq_len) {
+    if (buffer_seq_len_ == seq_len && hidden_states_ != nullptr) {
+        return;
+    }
+
     const size_t hs = config_.hidden_size;
     const size_t nh = config_.num_heads;
     const size_t nkvh = config_.num_kv_heads;
@@ -88,8 +92,10 @@ void Qwen2Model::allocateBuffers(size_t seq_len) {
     down_ = Tensor::create({seq_len, hs}, config_.dtype, device_type_, device_id_);
     logits_ = Tensor::create({1, voc}, config_.dtype, device_type_, device_id_);
     pos_ids_ = Tensor::create({seq_len}, LLAISYS_DTYPE_I64, device_type_, device_id_);
+    input_ids_ = Tensor::create({seq_len}, LLAISYS_DTYPE_I64, device_type_, device_id_);
     max_idx_ = Tensor::create({1}, LLAISYS_DTYPE_I64, device_type_, device_id_);
     max_val_ = Tensor::create({1}, config_.dtype, device_type_, device_id_);
+    buffer_seq_len_ = seq_len;
 }
 
 int64_t Qwen2Model::infer(const int64_t* token_ids, size_t num_tokens) {
@@ -105,8 +111,7 @@ int64_t Qwen2Model::infer(const int64_t* token_ids, size_t num_tokens) {
     allocateBuffers(num_tokens);
     
     // Create input token tensor
-    auto input_ids = Tensor::create({num_tokens}, LLAISYS_DTYPE_I64, device_type_, device_id_);
-    input_ids->load(token_ids);
+    input_ids_->load(token_ids);
     
     // Create position ids: [cache_len, cache_len+1, ..., cache_len+num_tokens-1]
     std::vector<int64_t> pos_ids_data(num_tokens);
@@ -116,7 +121,7 @@ int64_t Qwen2Model::infer(const int64_t* token_ids, size_t num_tokens) {
     pos_ids_->load(pos_ids_data.data());
     
     // Embedding lookup: hidden_states = embed_tokens[input_ids]
-    ops::embedding(hidden_states_, input_ids, embed_tokens_);
+    ops::embedding(hidden_states_, input_ids_, embed_tokens_);
     
     // Process each layer
     for (size_t layer = 0; layer < nl; ++layer) {

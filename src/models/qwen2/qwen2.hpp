@@ -76,8 +76,10 @@ private:
     tensor_t down_;             // [seq_len, hidden_size]
     tensor_t logits_;           // [1, vocab_size]
     tensor_t pos_ids_;          // [seq_len]
+    tensor_t input_ids_;        // [seq_len]
     tensor_t max_idx_;          // [1]
     tensor_t max_val_;          // [1]
+    size_t buffer_seq_len_;
     
     void allocateBuffers(size_t seq_len);
     void allocateKVCache();

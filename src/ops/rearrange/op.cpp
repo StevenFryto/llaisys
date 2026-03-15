@@ -4,6 +4,9 @@
 #include "../../utils.hpp"
 
 #include "cpu/rearrange_cpu.hpp"
+#ifdef ENABLE_NVIDIA_API
+#include "nvidia/rearrange_nvidia.cuh"
+#endif
 
 namespace llaisys::ops {
 void rearrange(tensor_t out, tensor_t in) {
@@ -26,8 +29,16 @@ void rearrange(tensor_t out, tensor_t in) {
                               out->dtype());
 #ifdef ENABLE_NVIDIA_API
     case LLAISYS_DEVICE_NVIDIA:
-        TO_BE_IMPLEMENTED();
-        return;
+        if (out->isContiguous() && in->isContiguous()) {
+            return llaisys::core::context().runtime().api()->memcpy_async(
+                out->data(),
+                in->data(),
+                out->numel() * out->elementSize(),
+                LLAISYS_MEMCPY_D2D,
+                llaisys::core::context().runtime().stream());
+        }
+        return nvidia::rearrange(out->data(), in->data(), out->shape(), out->strides(), in->strides(), out->dtype(),
+                                 llaisys::core::context().runtime().stream());
 #endif
     default:
         EXCEPTION_UNSUPPORTED_DEVICE;
